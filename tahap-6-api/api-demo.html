@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo API Kursus</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-dark bg-primary">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="index.php">Kursus Online</a>
+    <span class="navbar-text text-white">Demo konsumsi API (HTML + JavaScript saja, tanpa PHP)</span>
+  </div>
+</nav>
+
+<main class="container py-4">
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <form id="formCari" class="input-group mb-3">
+        <input type="search" id="kataKunci" class="form-control" placeholder="Cari kursus lewat API...">
+        <button class="btn btn-primary" type="submit">Cari</button>
+      </form>
+      <div id="status" class="text-muted small mb-2"></div>
+      <div id="daftarKursus" class="row g-3"></div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-semibold">Daftar lewat API (POST)</div>
+        <div class="card-body">
+          <form id="formDaftar">
+            <div class="mb-2">
+              <label class="form-label" for="idKursus">Kursus</label>
+              <select id="idKursus" class="form-select" required></select>
+            </div>
+            <div class="mb-2"><label class="form-label" for="fullname">Nama lengkap</label>
+              <input id="fullname" class="form-control" required maxlength="50"></div>
+            <div class="mb-2"><label class="form-label" for="phone">Telepon</label>
+              <input id="phone" class="form-control" required maxlength="25"></div>
+            <div class="mb-3"><label class="form-label" for="email">Email</label>
+              <input id="email" type="email" class="form-control" required maxlength="100"></div>
+            <button class="btn btn-success w-100" type="submit">Kirim</button>
+          </form>
+          <div id="hasilDaftar" class="mt-3"></div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-header bg-white fw-semibold">Respons JSON terakhir</div>
+        <pre id="jsonMentah" class="m-0 p-3 small" style="max-height:260px;overflow:auto">(belum ada)</pre>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Alamat API (relatif terhadap halaman ini)
+const URL_KURSUS = 'api/courses.php';
+const URL_DAFTAR = 'api/daftar.php';
+
+// Membuat elemen dengan textContent (aman dari XSS, tidak memakai innerHTML untuk data)
+function el(tag, kelas, teks) {
+  const n = document.createElement(tag);
+  if (kelas) n.className = kelas;
+  if (teks !== undefined) n.textContent = teks;
+  return n;
+}
+
+function tampilkanJson(obj) {
+  document.getElementById('jsonMentah').textContent = JSON.stringify(obj, null, 2);
+}
+
+async function muatKursus(q = '') {
+  const status = document.getElementById('status');
+  status.textContent = 'Memuat data...';
+  try {
+    const respons = await fetch(URL_KURSUS + '?batas=50&q=' + encodeURIComponent(q));
+    const hasil = await respons.json();
+    tampilkanJson(hasil);
+    if (!respons.ok) throw new Error(hasil.pesan || 'Terjadi kesalahan');
+
+    const wadah = document.getElementById('daftarKursus');
+    const pilihan = document.getElementById('idKursus');
+    wadah.replaceChildren();
+    pilihan.replaceChildren();
+
+    hasil.data.forEach(k => {
+      const kolom = el('div', 'col-md-6');
+      const kartu = el('div', 'card h-100 shadow-sm');
+      const gambar = el('img', 'card-img-top');
+      gambar.src = k.foto; gambar.alt = k.nama; gambar.style.cssText = 'height:140px;object-fit:cover';
+      const badan = el('div', 'card-body');
+      badan.append(el('h3', 'h6 card-title', k.nama),
+                   el('p', 'text-muted small mb-1', 'Mulai: ' + k.tanggal),
+                   el('p', 'small mb-0', k.deskripsi.length > 90 ? k.deskripsi.slice(0, 90) + '...' : k.deskripsi));
+      kartu.append(gambar, badan); kolom.append(kartu); wadah.append(kolom);
+
+      const opsi = el('option', '', k.nama); opsi.value = k.id; pilihan.append(opsi);
+    });
+    status.textContent = hasil.total + ' kursus ditemukan';
+  } catch (err) {
+    status.textContent = 'Gagal memuat: ' + err.message;
+  }
+}
+
+document.getElementById('formCari').addEventListener('submit', e => {
+  e.preventDefault();
+  muatKursus(document.getElementById('kataKunci').value.trim());
+});
+
+document.getElementById('formDaftar').addEventListener('submit', async e => {
+  e.preventDefault();
+  const kotak = document.getElementById('hasilDaftar');
+  const badan = {
+    id_course: Number(document.getElementById('idKursus').value),
+    fullname: document.getElementById('fullname').value.trim(),
+    phone: document.getElementById('phone').value.trim(),
+    email: document.getElementById('email').value.trim()
+  };
+  try {
+    const respons = await fetch(URL_DAFTAR, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(badan)
+    });
+    const hasil = await respons.json();
+    tampilkanJson(hasil);
+    kotak.className = 'mt-3 alert ' + (respons.ok ? 'alert-success' : 'alert-danger');
+    kotak.textContent = hasil.pesan + (hasil.kesalahan ? ' ' + hasil.kesalahan.join(' ') : '');
+    if (respons.ok) e.target.reset();
+  } catch (err) {
+    kotak.className = 'mt-3 alert alert-danger';
+    kotak.textContent = 'Gagal menghubungi API: ' + err.message;
+  }
+});
+
+muatKursus();
+</script>
+</body>
+</html>
